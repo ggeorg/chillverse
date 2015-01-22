@@ -40,10 +40,9 @@ public class GObject extends NativeObject implements GConnectFlags {
 
     return new SignalConnection() {
       public void disconnect() {
-        GObjectLibrary.INSTANCE.g_signal_handler_disconnect(GObject.this, connectId);
-
-        // release the signal handler reference
-        sSignalHandlers.remove(connectId);
+        if (sSignalHandlers.remove(connectId) != null) {
+          GObjectLibrary.INSTANCE.g_signal_handler_disconnect(GObject.this, connectId);
+        }
       }
     };
   }

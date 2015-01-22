@@ -1,11 +1,11 @@
 package chillverse.plasma.test;
 
 import chillverse.jna.gobject.GErrorException;
-import chillverse.jna.gobject.avahi.Avahi;
+import chillverse.jna.gobject.avahi.AvahiClient;
 
 public class Test01 {
   public static void main(String[] args) {
-    Avahi c = new Avahi();
+    AvahiClient c = new AvahiClient();
     
     try {
       c.start();

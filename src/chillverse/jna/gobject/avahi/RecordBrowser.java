@@ -1,12 +1,11 @@
 package chillverse.jna.gobject.avahi;
 
 import chillverse.jna.AvahiLibrary;
-import chillverse.jna.gobject.GError;
 import chillverse.jna.gobject.GErrorException;
 import chillverse.jna.gobject.GObject;
 
 import com.sun.jna.Pointer;
-
+import com.sun.jna.ptr.PointerByReference;
 
 public class RecordBrowser extends GObject {
 
@@ -18,8 +17,8 @@ public class RecordBrowser extends GObject {
     super(ptr);
   }
 
-  public void attach(Avahi client) throws GErrorException {
-    final GError error = new GError();
+  public void attach(AvahiClient client) throws GErrorException {
+    final PointerByReference error = new PointerByReference(null);
     if (!AvahiLibrary.INSTANCE.ga_record_browser_attach(this, client, error)) {
       throw new GErrorException(error);
     }

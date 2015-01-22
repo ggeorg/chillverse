@@ -1,16 +1,22 @@
 package chillverse.plasma.test;
 
 import chillverse.jna.gobject.GErrorException;
-import chillverse.jna.gobject.avahi.Avahi;
+import chillverse.jna.gobject.avahi.Address;
+import chillverse.jna.gobject.avahi.AvahiClient;
+import chillverse.jna.gobject.avahi.EntryGroup;
 import chillverse.jna.gobject.avahi.ServiceBrowser;
-import chillverse.jna.gobject.avahi.ServiceResolver;
-import chillverse.jna.gobject.avahi.Avahi.StateChangedSignalHandler;
 import chillverse.jna.gobject.avahi.ServiceBrowser.NewServiceSignalHandler;
+import chillverse.jna.gobject.avahi.ServiceResolver;
+import chillverse.jna.gobject.avahi.ServiceResolver.FoundSignalHandler;
+import chillverse.net.nsd.NsdManager;
+import chillverse.net.nsd.NsdServiceInfo;
 import chillverse.plasma.scene.Actor;
+import chillverse.plasma.scene.Actor.DestroySignalHandler;
 import chillverse.plasma.scene.Color;
 import chillverse.plasma.scene.Stage;
-import chillverse.plasma.scene.Actor.DestroySignalHandler;
 import chillverse.plasma.scene.text.Text;
+
+import com.sun.jna.Pointer;
 
 public class Test02 {
   public static void main(String[] args) {
@@ -44,42 +50,114 @@ public class Test02 {
       }
     });
 
-    startAvahi();
+    startAvahi2();
 
     Stage.mainStart();
   }
 
-  private static void startAvahi() {
-    Avahi c = new Avahi();
-    c.connect(new StateChangedSignalHandler() {
+  private static AvahiClient client = null;
+
+  private static void startAvahi2() {
+    client = new AvahiClient();
+    client.connect(new AvahiClient.StateChangedSignalHandler() {
       @Override
-      protected void onSignal(Avahi client, int state) {
-        System.out.println("State changed: " + state);
+      protected void onSignal(AvahiClient client, int state) {
+        if (state == AvahiClient.STATE_S_RUNNING) {
+          registerService();
+        }
+      }
+    });
+
+    ServiceBrowser browser = new ServiceBrowser("_http._tcp");
+    browser.connect(new NewServiceSignalHandler() {
+      @Override
+      protected void onSignal(ServiceBrowser browser, int iface, int protocol, String name, String type, String domain, int lookupResultFlags) {
+        final ServiceResolver resolver = new ServiceResolver(iface, protocol, name, type, domain, protocol);
+        resolver.connect(new FoundSignalHandler() {
+          @Override
+          protected void onSignal(ServiceResolver _resolver, int iface, int protocol, String name, String type, String domain, String hostname, Address address, short port, Pointer txt, int flags) {
+            System.out.println("> "+hostname);
+          }
+        });
+        
+        try {
+          resolver.attach(client);
+        } catch (GErrorException e) {
+          // TODO Auto-generated catch block
+          e.printStackTrace();
+        }
       }
     });
 
     try {
-      c.start();
+      client.start();
+      browser.attach(client);
     } catch (GErrorException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
     }
-    
-    ServiceBrowser browser = new ServiceBrowser("_keepalive._dns-sd._udp");
-    browser.connect(new NewServiceSignalHandler() {
+  }
+
+  protected static void registerService() {
+    EntryGroup group = new EntryGroup();
+    group.connect(new EntryGroup.StateChangedSignalHandler() {
       @Override
-      protected void onSignal(ServiceBrowser srvBrowser, int iface, int protocol, String name, String type, int lookupFlags) {
-        System.out.println(String.format("New: %s, type: %s", name, type));
+      protected void onSignal(EntryGroup group, int state) {
+        System.out.println("===================>" + state);
       }
     });
-    
+
     try {
-      browser.attach(c);
+      group.attach(client);
+
+      System.out.println(">>>>>>>>>>>>>>>>>>>> ");
+      group.addService("lalala", "_http._tcpx", 80, "dtalk=1", "dtype=Yes/1");
+      group.commit();
+
     } catch (GErrorException e) {
+      System.out.println(e.getCode());
       // TODO Auto-generated catch block
       e.printStackTrace();
     }
-    
-    
+  }
+
+  private static void startAvahi() {
+    final NsdManager nsdManager = new NsdManager();
+    nsdManager.discoverServices("_http._tcp", NsdManager.PROTOCOL_DNS_SD, new NsdManager.DiscoveryListener() {
+      public void onDiscoveryStarted(String serviceType) {
+        System.out.println("onDiscoveryStarted: " + serviceType);
+      }
+
+      public void onDiscoveryStopped(String serviceType) {
+        System.out.println("onDiscoveryStopped: " + serviceType);
+      }
+
+      public void onServiceFound(NsdServiceInfo serviceInfo) {
+        System.out.println("onServiceFound: " + serviceInfo);
+
+        nsdManager.resolveService(serviceInfo, new NsdManager.ResolveListener() {
+          public void onServiceResolved(NsdServiceInfo serviceInfo) {
+            System.out.println("onServiceResolved: " + serviceInfo);
+          }
+
+          public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
+            System.out.println("onResolveFailed: " + serviceInfo);
+          }
+        });
+      }
+
+      public void onServiceLost(NsdServiceInfo serviceInfo) {
+        System.out.println("onServiceLost: " + serviceInfo);
+      }
+
+      public void onStartDiscoveryFailed(String serviceType, int errorCode) {
+        System.out.println("onStartDiscoveryFailed: " + errorCode);
+      }
+
+      public void onStopDiscoveryFailed(String serviceType, int errorCode) {
+        System.out.println("onStopDiscoveryFailed: " + errorCode);
+      }
+    });
+
   }
 }

@@ -1,14 +1,15 @@
 package chillverse.jna.gobject.avahi;
 
-
 import chillverse.jna.AvahiLibrary;
 import chillverse.jna.gobject.GError;
 import chillverse.jna.gobject.GErrorException;
 import chillverse.jna.gobject.GObject;
+import chillverse.jna.gobject.NativeObject;
 import chillverse.plasma.signal.SignalConnection;
 import chillverse.plasma.signal.SignalHandler;
 
 import com.sun.jna.Pointer;
+import com.sun.jna.ptr.PointerByReference;
 
 public class ServiceBrowser extends GObject {
 
@@ -24,8 +25,8 @@ public class ServiceBrowser extends GObject {
     super(ptr);
   }
 
-  public void attach(Avahi client) throws GErrorException {
-    final GError error = new GError();
+  public void attach(AvahiClient client) throws GErrorException {
+    final PointerByReference error = new PointerByReference(null);
     if (!AvahiLibrary.INSTANCE.ga_service_browser_attach(this, client, error)) {
       throw new GErrorException(error);
     }
@@ -40,12 +41,12 @@ public class ServiceBrowser extends GObject {
   }
   
   public static abstract class NewServiceSignalHandler implements SignalHandler {
-    public final void onSignal(Pointer srvBrowserPtr, int iface, int protocol, String name, String type, int lookupFlags, Pointer userData) {
-      final ServiceBrowser srvBrowser = ServiceBrowser.instanceFor(srvBrowserPtr);
-      onSignal(srvBrowser, iface, protocol, name, type, lookupFlags);
+    public final void onSignal(Pointer ptr, int iface, int protocol, String name, String type, String domain, int lookupResultFlags, Pointer userData) {
+      final ServiceBrowser browser = NativeObject.instanceFor(ptr);
+      onSignal(browser, iface, protocol, name, type, domain, lookupResultFlags);
     }
 
-    protected abstract void onSignal(ServiceBrowser srvBrowser, int iface, int protocol, String name, String type, int lookupFlags);
+    protected abstract void onSignal(ServiceBrowser browser, int iface, int protocol, String name, String type, String domain, int lookupResultFlags);
   }
   
   // ---
@@ -55,12 +56,12 @@ public class ServiceBrowser extends GObject {
   }
   
   public static abstract class RemovedServiceSignalHandler implements SignalHandler {
-    public final void onSignal(Pointer srvBrowserPtr, int iface, int protocol, String name, String type, int lookupFlags, Pointer userData) {
-      final ServiceBrowser srvBrowser = ServiceBrowser.instanceFor(srvBrowserPtr);
-      onSignal(srvBrowser, iface, protocol, name, type, lookupFlags);
+    public final void onSignal(Pointer ptr, int iface, int protocol, String name, String type, String domain, int lookupResultFlags, Pointer userData) {
+      final ServiceBrowser browser = NativeObject.instanceFor(ptr);
+      onSignal(browser, iface, protocol, name, type, domain, lookupResultFlags);
     }
 
-    protected abstract void onSignal(ServiceBrowser srvBrowser, int iface, int protocol, String name, String type, int lookupFlags);
+    protected abstract void onSignal(ServiceBrowser browser, int iface, int protocol, String name, String type, String domain, int lookupResultFlags);
   }
   
   // TODO all-for-now
@@ -74,11 +75,12 @@ public class ServiceBrowser extends GObject {
   }
   
   public static abstract class FailureSignalHandler implements SignalHandler {
-    public final void onSignal(Pointer srvBrowserPtr, Pointer userData) {
-      final ServiceBrowser srvBrowser = ServiceBrowser.instanceFor(srvBrowserPtr);
-      onSignal(srvBrowser, userData);
+    public final void onSignal(Pointer ptr, GError error, Pointer userData) {
+      final ServiceBrowser browser = instanceFor(ptr);
+      onSignal(browser, error);
     }
 
-    protected abstract void onSignal(ServiceBrowser srvBrowser, Pointer userData);
+    protected abstract void onSignal(ServiceBrowser browser, GError error);
   }
+
 }

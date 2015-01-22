@@ -4,14 +4,19 @@ import java.util.Arrays;
 import java.util.List;
 
 import com.sun.jna.Structure;
+import com.sun.jna.ptr.PointerByReference;
 
 public class GError extends Structure {
 
-  public int domain;
+  public int domain; // guint32
 
-  public int code;
+  public int code; // gint
 
   public String message;
+  
+  public GError(PointerByReference error) {
+    useMemory(error.getValue());
+  }
 
   @SuppressWarnings("rawtypes")
   @Override
