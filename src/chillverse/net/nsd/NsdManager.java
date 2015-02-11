@@ -3,21 +3,22 @@ package chillverse.net.nsd;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.UnknownHostException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
-import com.sun.jna.Pointer;
-
+import chillverse.jna.AvahiCommonLibrary;
+import chillverse.jna.avahi.Address;
+import chillverse.jna.avahi.AvahiClient;
+import chillverse.jna.avahi.AvahiConstants;
+import chillverse.jna.avahi.AvahiServiceBrowser;
+import chillverse.jna.avahi.AvahiServiceResolver;
+import chillverse.jna.avahi.EntryGroup;
 import chillverse.jna.gobject.GError;
 import chillverse.jna.gobject.GErrorException;
-import chillverse.jna.gobject.avahi.Address;
-import chillverse.jna.gobject.avahi.AvahiClient;
-import chillverse.jna.gobject.avahi.AvahiConstants;
-import chillverse.jna.gobject.avahi.ServiceBrowser;
-import chillverse.jna.gobject.avahi.ServiceResolver;
 import chillverse.text.TextUtils;
+
+import com.sun.jna.Pointer;
 
 public class NsdManager implements AvahiConstants {
   @SuppressWarnings("unused")
@@ -67,14 +68,13 @@ public class NsdManager implements AvahiConstants {
 
   // ---
 
-  private final Map<NsdServiceInfo, Object> mListenerMap = new HashMap<NsdServiceInfo, Object>();
-  private final Map<Object, NsdServiceInfo> mServiceMap = new HashMap<Object, NsdServiceInfo>();
-  private final Object mMapLock = new Object();
+  private final Map<DiscoveryListener, AvahiDiscoveryListener> mDiscoveryListenerMap =
+      new ConcurrentHashMap<DiscoveryListener, AvahiDiscoveryListener>();
 
-  private final Map<String, ServiceBrowser> mServiceBrowsers = new ConcurrentHashMap<String, ServiceBrowser>();
-  
+  private final Map<RegistrationListener, AvahiRegistrationListener> mRegistrationListenerMap =
+      new ConcurrentHashMap<RegistrationListener, AvahiRegistrationListener>();
+
   private final Map<String, NsdServiceInfo> mServices = new ConcurrentHashMap<String, NsdServiceInfo>();
-  private final Map<String, ServiceResolver> mServiceResolvers = new ConcurrentHashMap<String, ServiceResolver>();
 
   private final AvahiClient client;
 
@@ -123,7 +123,7 @@ public class NsdManager implements AvahiConstants {
    *          stop discovery on this serviceType through a call on
    *          {@link #stopServiceDiscovery}. Cannot be {@code null}.
    */
-  public void discoverServices(String serviceType, int protocolType, final DiscoveryListener listener) {
+  public void discoverServices(final String serviceType, int protocolType, final DiscoveryListener listener) {
     if (listener == null) {
       throw new IllegalArgumentException("listener cannot be null");
     }
@@ -135,12 +135,12 @@ public class NsdManager implements AvahiConstants {
       throw new IllegalArgumentException("Unsupported protocol");
     }
 
-    final ServiceBrowser browser = new ServiceBrowser(serviceType);
-    final AvahiNsdServiceInfo s = new AvahiNsdServiceInfo(browser);
-    s.setServiceType(serviceType);
-    s.connect(new ServiceBrowser.NewServiceSignalHandler() {
+    final AvahiServiceBrowser browser = new AvahiServiceBrowser(serviceType);
+    final AvahiDiscoveryListener avahiListener = new AvahiDiscoveryListener(serviceType, listener);
+    avahiListener.setServiceBrowser(browser);
+    avahiListener.connect(new AvahiServiceBrowser.NewServiceSignalHandler() {
       @Override
-      protected void onSignal(ServiceBrowser srvBrowser, int iface, int protocol, String name, String type, String domain, int lookupResultFlags) {
+      protected void onSignal(AvahiServiceBrowser srvBrowser, int iface, int protocol, String name, String type, String domain, int lookupResultFlags) {
         NsdServiceInfo info = getServiceInfo(name, type);
         if (info != null) {
           // LOG warning
@@ -150,9 +150,9 @@ public class NsdManager implements AvahiConstants {
         listener.onServiceFound(info);
       }
     });
-    s.connect(new ServiceBrowser.RemovedServiceSignalHandler() {
+    avahiListener.connect(new AvahiServiceBrowser.RemovedServiceSignalHandler() {
       @Override
-      protected void onSignal(ServiceBrowser srvBrowser, int iface, int protocol, String name, String type, String domain, int lookupResultFlags) {
+      protected void onSignal(AvahiServiceBrowser srvBrowser, int iface, int protocol, String name, String type, String domain, int lookupResultFlags) {
         NsdServiceInfo info = getServiceInfo(name, type);
         if (info != null) {
           listener.onServiceLost(info);
@@ -163,13 +163,14 @@ public class NsdManager implements AvahiConstants {
     });
     // TODO cache-exhausted
 
+    mDiscoveryListenerMap.put(listener, avahiListener);
+
     try {
       browser.attach(client);
-      putListener(listener, s);
-      listener.onDiscoveryStarted(serviceType);
+      avahiListener.onDiscoveryStarted(serviceType);
     } catch (GErrorException e) {
       // TODO log the error
-      listener.onStartDiscoveryFailed(serviceType, e.getCode());
+      avahiListener.onStartDiscoveryFailed(serviceType, e.getCode());
     }
   }
 
@@ -193,21 +194,37 @@ public class NsdManager implements AvahiConstants {
       throw new IllegalArgumentException("listener cannot be null");
     }
 
-    NsdServiceInfo s = mServiceMap.get(listener);
-
-    // TODO STOP_DISCOVERY
+    final AvahiDiscoveryListener avahiListener = mDiscoveryListenerMap.remove(listener);
+    if (avahiListener != null) {
+      avahiListener.setServiceBrowser(null);
+      avahiListener.onDiscoveryStopped(avahiListener.getServiceType());
+    } else {
+      throw new IllegalArgumentException("listener not registered");
+    }
   }
 
-  public void resolveService(final NsdServiceInfo s, final ResolveListener listener) {
-    final AvahiNsdServiceInfo as = (AvahiNsdServiceInfo) s;
-    final ServiceResolver resolver = new ServiceResolver(as.iface, as.prototol, 
-        as.getServiceName(), as.getServiceType(), as.domain, as.prototol, ServiceResolver.LOOKUP_USE_MULTICAST);
-    as.setServiceResolver(resolver);
-    as.connect(new ServiceResolver.FoundSignalHandler() {
+  /**
+   * Resolve a discovered service. An Application can resolve a service right
+   * before establishing a connection to fetch the IP and port details on which
+   * to setup the connection.
+   * 
+   * @param serviceInfo
+   *          The service to be resolved.
+   * @param listener
+   *          To receive callback upon success or failure. Cannot be
+   *          {@code null}. Cannot be in use for an active service resolution.
+   */
+  public void resolveService(final NsdServiceInfo serviceInfo, final ResolveListener listener) {
+    final AvahiNsdServiceInfo as = (AvahiNsdServiceInfo) serviceInfo;
+    final AvahiServiceResolver resolver = new AvahiServiceResolver(as.iface, as.prototol,
+        as.getServiceName(), as.getServiceType(), as.domain, as.prototol, AvahiServiceResolver.LOOKUP_USE_MULTICAST);
+    final AvahiResolveListener avahiListener = new AvahiResolveListener(listener);
+    avahiListener.setServiceResolver(resolver);
+    avahiListener.connect(new AvahiServiceResolver.FoundSignalHandler() {
       @Override
-      protected void onSignal(ServiceResolver resolver, int iface, int protocol, 
+      protected void onSignal(AvahiServiceResolver resolver, int iface, int protocol,
           String name, String type, String domain, String hostname, Address address, short port, Pointer txt, int flags) {
-        NsdServiceInfo info = getServiceInfo(name, type);
+        final NsdServiceInfo info = getServiceInfo(name, type);
         if (info != null) {
           if (protocol == PROTO_INET) {
             try {
@@ -224,18 +241,24 @@ public class NsdManager implements AvahiConstants {
               e.printStackTrace();
             }
           }
+
           info.setPort(port);
-          // info.setTxtRecord(t)
-          listener.onServiceResolved(info);
+
+          byte[] data = new byte[4096];
+          int size = AvahiCommonLibrary.INSTANCE.avahi_string_list_serialize(txt, data, data.length);
+          info.setTxtRecord(new DnsSdTxtRecord(data, size));
+
+          avahiListener.onServiceResolved(info);
         } else {
-          // TODO Warning
+          avahiListener.onResolveFailed(serviceInfo, 0); // TODO specify error
+                                                         // code
         }
       }
     });
-    as.connect(new ServiceResolver.FailureSignalHandler() {
+    avahiListener.connect(new AvahiServiceResolver.FailureSignalHandler() {
       @Override
-      protected void onSignal(ServiceResolver resolver, GError error) {
-        listener.onResolveFailed(s, error.code);
+      protected void onSignal(AvahiServiceResolver resolver, GError error) {
+        listener.onResolveFailed(serviceInfo, error.code);
       }
     });
 
@@ -243,15 +266,101 @@ public class NsdManager implements AvahiConstants {
       resolver.attach(client);
     } catch (GErrorException e) {
       e.printStackTrace();
+      avahiListener.onResolveFailed(serviceInfo, 0); // TODO specify error code
     }
   }
 
-  public void registerService(NsdServiceInfo serviceInfo, int protocolType, RegistrationListener listener) {
-    throw new UnsupportedOperationException();
+  /**
+   * Register a service to be discovered by others.
+   * <p>
+   * The method call immediately returns after sending a request to register
+   * service to the framework. The application is notified of a success to
+   * initiate discovery through the callback
+   * {@link RegistrationListener#onServiceRegistered} or a failure through
+   * {@link RegistrationListener#onRegistrationFailed}.
+   * 
+   * @param serviceInfo
+   *          The service being registered.
+   * @param protocolType
+   *          The service discovery protocol.
+   * @param listener
+   *          The listener notifies of a successful registration and is used to
+   *          unregister this service through a call on
+   *          {@link #unregisterService}. Cannot be {@code null}.
+   */
+  public void registerService(final NsdServiceInfo s, int protocolType, final RegistrationListener listener) {
+    if (TextUtils.isEmpty(s.getServiceName()) ||
+        TextUtils.isEmpty(s.getServiceType())) {
+      throw new IllegalArgumentException("Service name or type cannot be empty");
+    }
+    if (s.getPort() <= 0) {
+      throw new IllegalArgumentException("Invalid port number");
+    }
+    if (listener == null) {
+      throw new IllegalArgumentException("listener cannot be null");
+    }
+    if (protocolType != PROTOCOL_DNS_SD) {
+      throw new IllegalArgumentException("Unsupported protocol");
+    }
+
+    final AvahiRegistrationListener avahiListener = new AvahiRegistrationListener(s, listener);
+    final EntryGroup entryGroup = new EntryGroup();
+    avahiListener.setEntryGroup(entryGroup);
+    avahiListener.connect(new EntryGroup.StateChangedSignalHandler() {
+      @Override
+      protected void onSignal(EntryGroup group, int state) {
+        switch (state) {
+        case EntryGroup.STATE_UNCOMMITED:
+          break;
+        case EntryGroup.STATE_REGISTERING:
+          break;
+        case EntryGroup.STATE_ESTABLISHED:
+          avahiListener.onServiceRegistered(s);
+          break;
+        case EntryGroup.STATE_COLLISTION:
+          break;
+        case EntryGroup.STATE_FAILURE:
+          avahiListener.onRegistrationFailed(s, 0); // TODO error code
+          break;
+        }
+      }
+    });
+    
+    mRegistrationListenerMap.put(listener, avahiListener);
+
+    try {
+      entryGroup.attach(client);
+      entryGroup.addService(s.getServiceName(), s.getServiceType(), s.getPort(), s.getTxtRecord());
+      entryGroup.commit();
+    } catch (GErrorException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+      avahiListener.onRegistrationFailed(s, 0); // TODO error code
+    }
   }
 
+  /**
+   * Unregister a service registered through {@link #registerService}. A
+   * successful unregister is notified to the application with a call to
+   * {@link RegistrationListener#onServiceUnregistered}.
+   * 
+   * @param listener
+   *          This should be the listener object that was passed to
+   *          {@link #registerService}. It identifies the service that should be
+   *          unregistered and notifies of a successful unregistration.
+   */
   public void unregisterService(RegistrationListener listener) {
-    throw new UnsupportedOperationException();
+    if (listener == null) {
+      throw new IllegalArgumentException("listener cannot be null");
+    }
+
+    final AvahiRegistrationListener avahiListener = mRegistrationListenerMap.remove(listener);
+    if (avahiListener != null) {
+      avahiListener.setEntryGroup(null);
+      avahiListener.onServiceUnregistered(avahiListener.getServiceInfo());
+    } else {
+      throw new IllegalArgumentException("listener not registered");
+    }
   }
 
   private NsdServiceInfo getServiceInfo(String name, String type) {
@@ -266,11 +375,4 @@ public class NsdManager implements AvahiConstants {
     return new StringBuilder().append(name).append(':').append(type).toString();
   }
 
-  private void putListener(Object listener, NsdServiceInfo s) {
-    assert (listener != null) : "INVALID_LISTENER_KEY";
-    synchronized (mMapLock) {
-      mListenerMap.put(s, listener);
-      mServiceMap.put(listener, s);
-    }
-  }
 }

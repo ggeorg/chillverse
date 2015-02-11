@@ -3,7 +3,7 @@ package chillverse.net.nsd;
 import java.net.InetAddress;
 
 /** A class representing service information for network service discovery. */
-public abstract class NsdServiceInfo {
+public class NsdServiceInfo {
 
   private String mServiceName;
   private String mServiceType;
@@ -18,9 +18,10 @@ public abstract class NsdServiceInfo {
     super();
   }
 
-  NsdServiceInfo(String sn, String rt, DnsSdTxtRecord tr) {
+  public NsdServiceInfo(String sn, String rt, int port, DnsSdTxtRecord tr) {
     mServiceName = sn;
     mServiceType = rt;
+    mPort = port;
     mTxtRecord = tr;
   }
 
@@ -44,14 +45,14 @@ public abstract class NsdServiceInfo {
     mServiceType = s;
   }
 
-  /** @hide */
+  /** TODO */
   public DnsSdTxtRecord getTxtRecord() {
-    throw new UnsupportedOperationException();
+    return mTxtRecord;
   }
 
-  /** @hide */
-  public void setTxtRecord(DnsSdTxtRecord t) {
-    throw new UnsupportedOperationException();
+  /** TODO */
+  public void setTxtRecord(DnsSdTxtRecord txtRecord) {
+    mTxtRecord = txtRecord;
   }
 
   /** Get the host address. The host address is valid for a resolved service. */
