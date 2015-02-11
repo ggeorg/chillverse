@@ -1,0 +1,8 @@
+<Window xmlns:bxml="http://pivot.apache.org/bxml" xmlns="chillverse.plasma.scene"
+	width="720" height="512" title="Chillblox Demo">
+
+	<Stack reactive="true">
+		<Video filename="/home/ggeorg/Videos/big_buck_bunny_480p_stereo.ogg" />
+	</Stack>
+
+</Window>
