@@ -1,10 +1,12 @@
-package chillverse.plasma.scene.text;
+package chillverse.plasma.scene;
 
+
+import org.apache.pivot.beans.DefaultProperty;
 
 import chillverse.jna.ClutterLibrary;
-import chillverse.plasma.scene.Actor;
-import chillverse.plasma.scene.Color;
+import chillverse.plasma.scene.text.LineAlignment;
 import chillverse.plasma.scene.text.EllipsizeMode;
+import chillverse.plasma.scene.text.WrapMode;
 
 import com.sun.jna.Pointer;
 
@@ -12,7 +14,8 @@ import com.sun.jna.Pointer;
  * An actor for displaying and editing text using Pango as the text rendering
  * engine..
  */
-public class Text extends Actor implements EllipsizeMode, Alignment, WrapMode {
+@DefaultProperty("text")
+public class Text extends Actor implements EllipsizeMode, LineAlignment, WrapMode {
 
   public Text() {
     this(ClutterLibrary.INSTANCE.clutter_text_new());
@@ -20,10 +23,15 @@ public class Text extends Actor implements EllipsizeMode, Alignment, WrapMode {
 
   protected Text(Pointer ptr) {
     super(ptr);
+
+    setLineWrap(true);
+    setLineWrapMode(WRAP_WORD);
+    this.setLineAlignment(ALIGN_RIGHT);
   }
   
   public void setText(String text) {
-    ClutterLibrary.INSTANCE.clutter_text_set_text(this, text);
+    //ClutterLibrary.INSTANCE.clutter_text_set_text(this, text);
+    setMarkup(text);
   }
   
   public void setMarkup(String text) {
@@ -43,6 +51,10 @@ public class Text extends Actor implements EllipsizeMode, Alignment, WrapMode {
   }
   
   // TODO PangoAttrList
+  
+  public void setColor(String c) {
+    setColor(Color.decodeColor(c));
+  }
   
   public void setColor(Color c) {
     ClutterLibrary.INSTANCE.clutter_text_set_color(this, c);
@@ -106,11 +118,11 @@ public class Text extends Actor implements EllipsizeMode, Alignment, WrapMode {
     return ClutterLibrary.INSTANCE.clutter_text_get_line_wrap(this);
   }
   
-  public void setWrapMode(int wrapMode) {
+  public void setLineWrapMode(int wrapMode) {
     ClutterLibrary.INSTANCE.clutter_text_set_line_wrap_mode(this, wrapMode);
   }
   
-  public int getWrapMode() {
+  public int getLineWrapMode() {
     return ClutterLibrary.INSTANCE.clutter_text_get_line_wrap_mode(this);
   }
   

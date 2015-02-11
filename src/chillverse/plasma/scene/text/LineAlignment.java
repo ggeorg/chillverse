@@ -1,10 +1,12 @@
 package chillverse.plasma.scene.text;
 
+import chillverse.plasma.scene.Text;
+
 /**
  * {@code Alignment} describes how to align the lines of {@link Text} within the
  * available space.
  */
-public interface Alignment {
+public interface LineAlignment {
   /** Put all available space on the right. */
   public final int ALIGN_LEFT = 0;
   /** Center the line within the available space. */

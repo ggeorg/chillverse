@@ -1,20 +1,42 @@
 package chillverse.plasma.scene;
 
-
 import java.util.Iterator;
 
+import org.apache.pivot.beans.IDProperty;
 
 import chillverse.jna.ClutterLibrary;
+import chillverse.jna.NativeObject;
+import chillverse.jna.glib.GList;
 import chillverse.jna.gobject.GObject;
-import chillverse.jna.gobject.NativeObject;
 import chillverse.plasma.geometry.Dimension;
 import chillverse.plasma.geometry.Point2D;
+import chillverse.plasma.scene.constraint.Constraint;
+import chillverse.plasma.scene.layout.LayoutManager;
 import chillverse.plasma.signal.SignalConnection;
 import chillverse.plasma.signal.SignalHandler;
 
 import com.sun.jna.Pointer;
 
+@IDProperty("name")
 public class Actor extends GObject {
+
+  /** Stretch to cover the whole allocated space. */
+  public static final int ALIGN_FILL = 0;
+
+  /**
+   * Snap to left or top side, leaving space to the right or bottom. For
+   * horizontal layouts, in right-to-left locales this should be reversed.
+   */
+  public static final int ALIGN_START = 0;
+
+  /** Center the actor inside the allocation. */
+  public static final int ALIGN_CENTER = 0;
+
+  /**
+   * Snap to right or bottom side, leaving space to the left or top. For
+   * horizontal layouts, in right-to-left locales this should be reversed.
+   */
+  public static final int ALIGN_END = 0;
 
   /**
    * The {@code destroy} signal notifies that all references held on the actor
@@ -62,12 +84,72 @@ public class Actor extends GObject {
 
   // TODO event
 
-  public void setHorizontalAlign() {
-
+  public void setHorizontalAlign(String align) {
+    if ("fill".equals(align)) {
+      setHorizontalAlign(ALIGN_FILL);
+    } else if ("start".equals(align)) {
+      setHorizontalAlign(ALIGN_START);
+    } else if ("center".equals(align)) {
+      setHorizontalAlign(ALIGN_CENTER);
+    } else if ("end".equals(align)) {
+      setHorizontalAlign(ALIGN_END);
+    }
   }
 
-  public void setVerticalAlign() {
+  public void setHorizontalAlign(int align) {
+    ClutterLibrary.INSTANCE.clutter_actor_set_x_align(this, align);
+  }
 
+  public int getHorizontalAlign() {
+    return ClutterLibrary.INSTANCE.clutter_actor_get_x_align(this);
+  }
+
+  public void setVerticalAlign(String align) {
+    if ("fill".equals(align)) {
+      setVerticalAlign(ALIGN_FILL);
+    } else if ("start".equals(align)) {
+      setVerticalAlign(ALIGN_START);
+    } else if ("center".equals(align)) {
+      setVerticalAlign(ALIGN_CENTER);
+    } else if ("end".equals(align)) {
+      setVerticalAlign(ALIGN_END);
+    }
+  }
+
+  public void setVerticalAlign(int align) {
+    ClutterLibrary.INSTANCE.clutter_actor_set_y_align(this, align);
+  }
+
+  public int getVerticalAlign() {
+    return ClutterLibrary.INSTANCE.clutter_actor_get_y_align(this);
+  }
+
+  public void setHorizontalExpand(boolean expand) {
+    ClutterLibrary.INSTANCE.clutter_actor_set_x_expand(this, expand);
+  }
+
+  public boolean isHorizontalExpand() {
+    return ClutterLibrary.INSTANCE.clutter_actor_get_x_expand(this);
+  }
+
+  public void setVerticalExpand(boolean expand) {
+    ClutterLibrary.INSTANCE.clutter_actor_set_y_expand(this, expand);
+  }
+
+  public boolean isVerticalExpand() {
+    return ClutterLibrary.INSTANCE.clutter_actor_get_y_expand(this);
+  }
+
+  protected void setLayoutManager(LayoutManager manager) {
+    ClutterLibrary.INSTANCE.clutter_actor_set_layout_manager(this, manager);
+  }
+
+  protected LayoutManager getLayoutManager() {
+    return ClutterLibrary.INSTANCE.clutter_actor_get_layout_manager(this);
+  }
+
+  public void setBackgroundColor(String color) {
+    setBackgroundColor(Color.decodeColor(color));
   }
 
   public void setBackgroundColor(Color c) {
@@ -163,7 +245,7 @@ public class Actor extends GObject {
   }
 
   public void addChild(Actor child) {
-    ClutterLibrary.INSTANCE.clutter_actor_add_child(this, child.getPtr());
+    ClutterLibrary.INSTANCE.clutter_actor_add_child(this, child);
   }
 
   public void insertChildAbove(Actor child, Actor sibling) {
@@ -183,7 +265,7 @@ public class Actor extends GObject {
   }
 
   public void removeChild(Actor child) {
-    ClutterLibrary.INSTANCE.clutter_actor_remove_child(this, child.getPtr());
+    ClutterLibrary.INSTANCE.clutter_actor_remove_child(this, child);
   }
 
   public void removeAllChildren() {
@@ -215,9 +297,12 @@ public class Actor extends GObject {
   }
 
   public Actor getChildAtIndex(int index) {
-    final Pointer handle = ClutterLibrary.INSTANCE.clutter_actor_get_child_at_index(this, index);
-    // TODO
-    return null;
+    return ClutterLibrary.INSTANCE.clutter_actor_get_child_at_index(this, index);
+  }
+
+  public int indexOf(Actor child) {
+    final GList<Actor> gList = new GList<Actor>(ClutterLibrary.INSTANCE.clutter_actor_get_children(this));
+    return gList.indexOf(child);
   }
 
   // TODO clutter_actor_get_children()
@@ -267,6 +352,33 @@ public class Actor extends GObject {
     return ClutterLibrary.INSTANCE.clutter_actor_get_easing_delay(this);
   }
 
+  /** Sets actor as reactive. Reactive actors will receive events. */
+  public void setReactive(boolean reactive) {
+    ClutterLibrary.INSTANCE.clutter_actor_set_reactive(this, reactive);
+  }
+
+  /** Checks whether actor is marked as reactive. */
+  public boolean isReactive() {
+    return ClutterLibrary.INSTANCE.clutter_actor_get_reactive(this);
+  }
+
+  /** Checks whether this actor is the actor that has key focus. */
+  public boolean hasKeyFocus() {
+    return ClutterLibrary.INSTANCE.clutter_actor_has_key_focus(this);
+  }
+
+  public void grabKeyFocus() {
+    ClutterLibrary.INSTANCE.clutter_actor_grab_key_focus(this);
+  }
+
+  public boolean hasPointer() {
+    return ClutterLibrary.INSTANCE.clutter_actor_has_pointer(this);
+  }
+
+  public void addConstraing(Constraint constraint) {
+    ClutterLibrary.INSTANCE.clutter_actor_add_constraint(this, constraint);
+  }
+
   // ---
 
   public SignalConnection connect(DestroySignalHandler handler) {
@@ -280,8 +392,7 @@ public class Actor extends GObject {
    */
   protected static abstract class ActorSignalHandler implements SignalHandler {
     public final void onSignal(Pointer actorPtr, Pointer userData) {
-      final Actor actor = NativeObject.instanceFor(actorPtr);
-      onSignal(actor);
+      onSignal((Actor) NativeObject.instanceFor(actorPtr));
     }
 
     /**
