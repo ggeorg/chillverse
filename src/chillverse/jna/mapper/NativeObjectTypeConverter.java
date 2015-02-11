@@ -1,7 +1,7 @@
 package chillverse.jna.mapper;
 
 
-import chillverse.jna.gobject.NativeObject;
+import chillverse.jna.NativeObject;
 
 import com.sun.jna.FromNativeContext;
 import com.sun.jna.Pointer;

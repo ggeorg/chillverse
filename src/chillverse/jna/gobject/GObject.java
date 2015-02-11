@@ -1,11 +1,10 @@
 package chillverse.jna.gobject;
 
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-
 import chillverse.jna.GObjectLibrary;
+import chillverse.jna.NativeObject;
 import chillverse.plasma.signal.SignalConnection;
 import chillverse.plasma.signal.SignalHandler;
 
@@ -29,7 +28,7 @@ public class GObject extends NativeObject implements GConnectFlags {
     return connect(signal, handler, 0);
   }
 
-  protected final synchronized SignalConnection connect(String signal, SignalHandler handler, int connectFlags) {
+  protected final SignalConnection connect(String signal, SignalHandler handler, int connectFlags) {
     final NativeLong connectId = GObjectLibrary.INSTANCE.g_signal_connect_data(this, signal, handler, null, null, connectFlags);
     if (connectId.intValue() == 0) {
       throw new IllegalArgumentException(String.format("Failed to connect signal '%s'", signal));
@@ -39,10 +38,14 @@ public class GObject extends NativeObject implements GConnectFlags {
     sSignalHandlers.put(connectId, handler);
 
     return new SignalConnection() {
+      private NativeLong id = connectId;
+
+      @Override
       public void disconnect() {
-        if (sSignalHandlers.remove(connectId) != null) {
-          GObjectLibrary.INSTANCE.g_signal_handler_disconnect(GObject.this, connectId);
+        if (sSignalHandlers.remove(id) != null) {
+          GObjectLibrary.INSTANCE.g_signal_handler_disconnect(GObject.this, id);
         }
+        this.id = null;
       }
     };
   }

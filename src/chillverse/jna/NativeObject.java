@@ -1,9 +1,9 @@
-package chillverse.jna.gobject;
+package chillverse.jna;
 
 
 import java.util.concurrent.ConcurrentHashMap;
 
-import chillverse.jna.GObjectLibrary;
+import chillverse.jna.gobject.GObject;
 
 import com.sun.jna.Pointer;
 
@@ -43,6 +43,7 @@ public abstract class NativeObject {
     this.nativeRef = new NativeRef(this);
 
     if (GObject.class.isAssignableFrom(getClass())) {
+      GObjectLibrary.INSTANCE.g_object_ref((GObject) this);
       sInstanceMap.put(this.ptr, this.nativeRef);
     }
   }

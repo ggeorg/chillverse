@@ -23,9 +23,10 @@ public interface GObjectLibrary extends Library {
     }
   });
   
+  public void g_object_ref(GObject obj);
   public void g_object_unref(GObject obj);
   
-  public NativeLong g_signal_connect_data(GObject obj, String signal, Callback callback, 
-      Pointer data, GClosureNotify destroy_data, int connect_flags);
+  public NativeLong g_signal_connect_data(GObject obj, String signal, 
+      Callback callback, Pointer data, GClosureNotify destroy_data, int connect_flags);
   public void g_signal_handler_disconnect(GObject obj, NativeLong id);
 }
